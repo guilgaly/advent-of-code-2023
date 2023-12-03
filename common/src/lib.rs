@@ -5,7 +5,6 @@ pub use maplit;
 pub use ndarray;
 pub use peg;
 pub use regex;
-pub use sscanf;
 
 use std::time::Instant;
 
