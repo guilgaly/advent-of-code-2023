@@ -205,6 +205,7 @@ name = "day_4"
 version = "0.1.0"
 dependencies = [
  "common",
+ "sscanf",
 ]
 
 [[package]]
