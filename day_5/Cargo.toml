@@ -9,3 +9,5 @@ edition = "2021"
 [dependencies]
 
 common = { path = "../common"}
+sscanf = "0.4.1"
+range-collections = "0.4.5"
