@@ -1,6 +1,7 @@
 pub use ascii;
 pub use itertools;
 pub use lazy_static;
+pub use lcmx;
 pub use maplit;
 pub use ndarray;
 pub use peg;
