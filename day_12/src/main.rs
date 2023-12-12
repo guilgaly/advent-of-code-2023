@@ -1,15 +1,18 @@
 use common::itertools::Itertools;
+use common::maplit::hashmap;
+use common::time_execution;
+use std::collections::HashMap;
 
 static INPUT: &str = include_str!("input");
 
 fn main() {
     let records = parse_input(INPUT);
 
-    let res1 = part_1(&records);
+    let res1 = time_execution("part 1", || part_1(&records));
     println!("Part 1 result: {}", res1);
 
-    // let res2 = part_2(&records);
-    // println!("Part 2 result: {}", res2);
+    let res2 = time_execution("part 2", || part_2(&records));
+    println!("Part 2 result: {}", res2);
 }
 
 fn part_1(records: &[Record]) -> usize {
@@ -19,56 +22,81 @@ fn part_1(records: &[Record]) -> usize {
         .sum()
 }
 
-// fn part_2(records: &[Record]) -> usize {
-//     unfold(records).iter()
-//         .map(|record| count_arrangements(record))
-//         .sum()
-// }
-
-fn count_arrangements(Record { damaged_springs, damaged_groups }: &Record) -> usize {
-    fn recurs(tmp: &mut Vec<bool>, unknowns: &[usize], damaged_groups: &[usize]) -> usize {
-        if unknowns.is_empty() {
-            if group_damaged_springs(tmp) == damaged_groups {
-                1
-            } else {
-                0
-            }
-        } else {
-            let (curr, rest) = unknowns.split_at(1);
-            tmp[curr[0]] = false;
-            let c1 = recurs(tmp, rest, damaged_groups);
-            tmp[curr[0]] = true;
-            let c2 = recurs(tmp, rest, damaged_groups);
-            c1 + c2
-        }
-    }
-
-    let unknowns = damaged_springs
+fn part_2(records: &[Record]) -> usize {
+    records
         .iter()
-        .enumerate()
-        .filter_map(|(idx, v)| match v {
-            None => Some(idx),
-            _ => None,
-        })
-        .collect_vec();
-    let mut tmp = damaged_springs
-        .iter()
-        .map(|v| match v {
-            None => false,
-            Some(true) => true,
-            Some(false) => false,
-        })
-        .collect_vec();
-
-    recurs(&mut tmp, &unknowns, damaged_groups)
+        .map(|record| count_arrangements(&unfold(record)))
+        .sum()
 }
 
-fn group_damaged_springs(damaged_springs: &[bool]) -> Vec<usize> {
-    let grouped = damaged_springs.into_iter().group_by(|&&damaged| damaged);
-    grouped
-        .into_iter()
-        .filter_map(|(value, group)| if value { Some(group.count()) } else { None })
-        .collect_vec()
+fn count_arrangements(Record { springs, damaged_groups }: &Record) -> usize {
+    // Before we start, we haven't yet counted any spring within the first group, and there is only one permutation possible for this
+    let init_permutations = hashmap! { DamagedGroup {idx: 0, amount: 0} => 1 };
+    springs
+        .iter()
+        .fold(init_permutations, |acc, &spring| {
+            let mut permutation_counts = HashMap::new();
+            let mut increment_permutations = |idx: usize, amount: usize, permutations: usize| {
+                let group_amount = DamagedGroup { idx, amount };
+                *permutation_counts.entry(group_amount).or_default() += permutations;
+            };
+
+            match spring {
+                None => {
+                    for (DamagedGroup { idx, amount }, permutations) in acc {
+                        // amount = 0: we can add a damaged spring (1) or an undamaged spring (2)
+                        // 0 < amount < group_size: we're in the middle of a group, we can only add a damaged spring (1)
+                        // amount = group_size: we've reached the end of a group, we can only add an undamaged spring and must increment the index (3)
+
+                        if idx < damaged_groups.len() && amount < damaged_groups[idx] {
+                            // 1
+                            increment_permutations(idx, amount + 1, permutations);
+                        }
+
+                        if amount == 0 {
+                            // 2
+                            increment_permutations(idx, 0, permutations);
+                        } else if amount == damaged_groups[idx] {
+                            // 3
+                            increment_permutations(idx + 1, 0, permutations);
+                        }
+                    }
+                }
+                Some(damaged_spring) => {
+                    for (DamagedGroup { idx, amount }, permutations) in acc {
+                        if damaged_spring
+                            && idx < damaged_groups.len()
+                            && amount < damaged_groups[idx]
+                        {
+                            // One more damaged spring in the current group
+                            increment_permutations(idx, amount + 1, permutations);
+                        } else if !damaged_spring && amount == 0 {
+                            // One more undamaged spring (and we're not in the middle of a group of damaged springs)
+                            increment_permutations(idx, 0, permutations);
+                        } else if !damaged_spring && amount == damaged_groups[idx] {
+                            // The current group of damaged springs ends with this undamaged spring
+                            increment_permutations(idx + 1, 0, permutations);
+                        }
+                    }
+                }
+            };
+
+            permutation_counts
+        })
+        .iter()
+        .filter_map(|(&DamagedGroup { idx, amount }, &permutations)| {
+            // We count only the cases where we correctly reached the end:
+            // - we went past the last group of damaged springs and didn't count any more damaged spring
+            // - we're on the last group of damaged springs and we have the expected amount of those
+            if (idx == damaged_groups.len() - 1 && amount == *damaged_groups.last().unwrap())
+                || (idx == damaged_groups.len() && amount == 0)
+            {
+                Some(permutations)
+            } else {
+                None
+            }
+        })
+        .sum()
 }
 
 fn parse_input(input: &str) -> Vec<Record> {
@@ -76,7 +104,7 @@ fn parse_input(input: &str) -> Vec<Record> {
         .lines()
         .map(|line| {
             let mut s = line.split_whitespace();
-            let damaged_springs = s
+            let springs = s
                 .next()
                 .unwrap()
                 .chars()
@@ -93,41 +121,41 @@ fn parse_input(input: &str) -> Vec<Record> {
                 .split(',')
                 .map(|n| n.parse::<usize>().unwrap())
                 .collect_vec();
-            Record { damaged_springs, damaged_groups }
+            Record { springs, damaged_groups }
         })
         .collect_vec()
 }
 
-fn unfold(records: &[Record]) -> Vec<Record> {
-    records
-        .iter()
-        .map(|record| {
-            let mut damaged_springs = Vec::new();
-            for i in 1..=5 {
-                record
-                    .damaged_springs
-                    .iter()
-                    .for_each(|&v| damaged_springs.push(v));
-                if i != 5 {
-                    damaged_springs.push(None);
-                }
-            }
+fn unfold(record: &Record) -> Record {
+    let mut springs = Vec::new();
+    for i in 1..=5 {
+        record.springs.iter().for_each(|&v| springs.push(v));
+        if i != 5 {
+            springs.push(None);
+        }
+    }
 
-            let mut damaged_groups = Vec::new();
-            for _ in 1..=5 {
-                record
-                    .damaged_groups
-                    .iter()
-                    .for_each(|&g| damaged_groups.push(g));
-            }
+    let mut damaged_groups = Vec::new();
+    for _ in 1..=5 {
+        record
+            .damaged_groups
+            .iter()
+            .for_each(|&g| damaged_groups.push(g));
+    }
 
-            Record { damaged_springs, damaged_groups }
-        })
-        .collect_vec()
+    Record { springs, damaged_groups }
+}
+
+/// idx: index of this group of broken springs
+/// amount: number of broken springs already counted in this group
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
+struct DamagedGroup {
+    idx: usize,
+    amount: usize,
 }
 
 struct Record {
-    damaged_springs: Vec<Option<bool>>,
+    springs: Vec<Option<bool>>,
     damaged_groups: Vec<usize>,
 }
 
@@ -147,8 +175,8 @@ mod tests {
         assert_eq!(part_1(&parse_input(TEST_INPUT)), 21);
     }
 
-    // #[test]
-    // fn test_part_2() {
-    //     assert_eq!(part_2(&parse_input(TEST_INPUT)), 525152);
-    // }
+    #[test]
+    fn test_part_2() {
+        assert_eq!(part_2(&parse_input(TEST_INPUT)), 525152);
+    }
 }
