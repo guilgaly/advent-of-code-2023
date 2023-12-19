@@ -39,7 +39,6 @@ dependencies = [
  "lcmx",
  "maplit",
  "ndarray",
- "peg",
  "regex",
  "sscanf",
 ]
@@ -149,6 +148,7 @@ name = "day_19"
 version = "0.1.0"
 dependencies = [
  "common",
+ "peg",
 ]
 
 [[package]]
