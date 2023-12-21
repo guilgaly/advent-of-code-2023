@@ -9,3 +9,4 @@ edition = "2021"
 [dependencies]
 
 common = { path = "../common"}
+peg = "0.8.2"
