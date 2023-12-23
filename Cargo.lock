@@ -141,6 +141,7 @@ name = "day_18"
 version = "0.1.0"
 dependencies = [
  "common",
+ "sscanf",
 ]
 
 [[package]]
